@@ -17,7 +17,7 @@ def stream_users() -> Generator[Dict[str, str | int], None, None]:
         connection = mysql.connector.connect(
             host='localhost',
             user='root',
-            password='',
+            password='password',
             database='ALX_prodev'
         )
         
