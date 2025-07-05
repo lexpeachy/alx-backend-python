@@ -1,4 +1,5 @@
 import mysql.connector
+import sys
 from typing import Dict, Generator, List
 
 def stream_users_in_batches(batch_size: int) -> Generator[List[Dict[str, str | int]], None, None]:
@@ -23,7 +24,7 @@ def stream_users_in_batches(batch_size: int) -> Generator[List[Dict[str, str | i
             database='ALX_prodev'
         )
         
-        # Create a server-side cursor (more memory efficient)
+        # Create a server-side cursor
         cursor = connection.cursor(dictionary=True)
         
         # Execute the query
@@ -52,10 +53,7 @@ def batch_processing(batch_size: int = 50) -> None:
     Args:
         batch_size: Number of users to process at a time (default: 50)
     """
-    # Loop 1: Iterate through batches
     for batch in stream_users_in_batches(batch_size):
-        # Loop 2: Process each user in the batch
         for user in batch:
-            # Loop 3: Filter users over 25
             if user['age'] > 25:
                 print(user)
