@@ -6,7 +6,7 @@ def stream_users_in_batches(batch_size: int) -> Generator[List[Dict[str, str | i
     conn = mysql.connector.connect(
         host='localhost',
         user='root',
-        password='',
+        password='password',
         database='ALX_prodev'
     )
     cursor = conn.cursor(dictionary=True)
