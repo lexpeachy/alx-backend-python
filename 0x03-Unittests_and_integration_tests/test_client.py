@@ -17,13 +17,17 @@ class TestGithubOrgClient(unittest.TestCase):
     @patch('client.get_json')
     def test_org(self, org_name, mock_get_json):
         """Test that GithubOrgClient.org returns correct value"""
-        test_payload = {"name": org_name, "repos_url": f"https://api.github.com/orgs/{org_name}/repos"}
+        test_payload = {
+            "name": org_name,
+            "repos_url": f"https://api.github.com/orgs/{org_name}/repos"
+        }
         mock_get_json.return_value = test_payload
 
         client = GithubOrgClient(org_name)
         result = client.org
 
-        mock_get_json.assert_called_once_with(f"https://api.github.com/orgs/{org_name}")
+        expected_url = f"https://api.github.com/orgs/{org_name}"
+        mock_get_json.assert_called_once_with(expected_url)
         self.assertEqual(result, test_payload)
         mock_get_json.reset_mock()
 
@@ -32,7 +36,7 @@ class TestGithubOrgClient(unittest.TestCase):
         test_payload = {
             "repos_url": "https://api.github.com/orgs/testorg/repos"
         }
-        
+
         with patch(
             'client.GithubOrgClient.org',
             new_callable=PropertyMock,
@@ -40,7 +44,7 @@ class TestGithubOrgClient(unittest.TestCase):
         ) as mock_org:
             client = GithubOrgClient("testorg")
             result = client._public_repos_url
-            
+
             mock_org.assert_called_once()
             self.assertEqual(result, test_payload["repos_url"])
 
@@ -65,7 +69,9 @@ class TestGithubOrgClient(unittest.TestCase):
             expected_repos = ["repo1", "repo2", "repo3"]
             self.assertEqual(repos, expected_repos)
             mock_public_repos_url.assert_called_once()
-            mock_get_json.assert_called_once_with("https://api.github.com/orgs/testorg/repos")
+            mock_get_json.assert_called_once_with(
+                "https://api.github.com/orgs/testorg/repos"
+            )
 
     @parameterized.expand([
         ({"license": {"key": "my_license"}}, "my_license", True),
@@ -77,8 +83,10 @@ class TestGithubOrgClient(unittest.TestCase):
         self.assertEqual(result, expected_result)
 
 
-@parameterized_class(('org_payload', 'repos_payload', 'expected_repos', 'apache2_repos'), 
-                   TEST_PAYLOAD)
+@parameterized_class(
+    ('org_payload', 'repos_payload', 'expected_repos', 'apache2_repos'),
+    TEST_PAYLOAD
+)
 class TestIntegrationGithubOrgClient(unittest.TestCase):
     """Integration tests for GithubOrgClient"""
 
@@ -107,7 +115,6 @@ class TestIntegrationGithubOrgClient(unittest.TestCase):
         """Test public_repos without license filter"""
         client = GithubOrgClient("google")
         repos = client.public_repos()
-        
         self.assertEqual(repos, self.expected_repos)
         self.mock_get.assert_called()
 
@@ -115,7 +122,6 @@ class TestIntegrationGithubOrgClient(unittest.TestCase):
         """Test public_repos with Apache 2.0 license filter"""
         client = GithubOrgClient("google")
         repos = client.public_repos(license="apache-2.0")
-        
         self.assertEqual(repos, self.apache2_repos)
         self.mock_get.assert_called()
 
