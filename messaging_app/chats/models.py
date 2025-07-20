@@ -2,12 +2,13 @@ import uuid
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-from django.utils import timezone
 
 class User(AbstractUser):
     """
-    Custom User model extending Django's AbstractUser with additional fields.
+    Custom User model extending Django's AbstractUser.
+    Includes all required fields while maintaining built-in auth functionality.
     """
+    # Primary key (user_id equivalent)
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -15,17 +16,14 @@ class User(AbstractUser):
         unique=True,
         verbose_name="User ID"
     )
+    
+    # Required fields (AbstractUser already includes username and password)
     email = models.EmailField(
         _('email address'),
         unique=True,
         blank=False,
-        null=False
-    )
-    phone_number = models.CharField(
-        max_length=20,
-        blank=True,
-        null=True,
-        unique=True
+        null=False,
+        help_text="Required. Must be a valid email address."
     )
     first_name = models.CharField(
         _('first name'),
@@ -39,26 +37,59 @@ class User(AbstractUser):
         blank=False,
         null=False
     )
+    
+    # Optional fields
+    phone_number = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        unique=True
+    )
     profile_picture = models.ImageField(
         upload_to='profile_pics/',
         null=True,
         blank=True
     )
-    online_status = models.BooleanField(default=False)
-    last_seen = models.DateTimeField(null=True, blank=True)
-    bio = models.TextField(max_length=500, blank=True)
+    online_status = models.BooleanField(
+        default=False,
+        help_text="Designates whether the user is currently online."
+    )
+    last_seen = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Last time the user was active."
+    )
+    bio = models.TextField(
+        max_length=500,
+        blank=True,
+        help_text="Brief description about yourself."
+    )
 
+    # Authentication configuration
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'first_name', 'last_name']
+
+    class Meta:
+        verbose_name = _('user')
+        verbose_name_plural = _('users')
 
     def __str__(self):
         return f"{self.get_full_name()} ({self.email})"
 
     def save(self, *args, **kwargs):
-        self.email = self.email.lower()
+        """Normalize email and handle username generation"""
+        self.email = self.email.lower().strip()
         if not self.username:
             self.username = self.email
         super().save(*args, **kwargs)
+
+    def get_full_name(self):
+        """Return the first_name plus the last_name with a space in between."""
+        return f"{self.first_name} {self.last_name}".strip()
+
+    def get_short_name(self):
+        """Return the short name for the user (first_name only)."""
+        return self.first_name
 
 class Conversation(models.Model):
     """
