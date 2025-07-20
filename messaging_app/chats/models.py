@@ -4,17 +4,10 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 
-import uuid
-from django.contrib.auth.models import AbstractUser
-from django.db import models
-from django.utils.translation import gettext_lazy as _
-
 class User(AbstractUser):
     """
-    Custom User model extending Django's AbstractUser.
-    Includes all required fields while maintaining built-in auth functionality.
+    Custom User model extending Django's AbstractUser with additional fields.
     """
-    # Primary key (user_id equivalent)
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -22,14 +15,17 @@ class User(AbstractUser):
         unique=True,
         verbose_name="User ID"
     )
-    
-    # Required fields (AbstractUser already includes username and password)
     email = models.EmailField(
         _('email address'),
         unique=True,
         blank=False,
-        null=False,
-        help_text="Required. Must be a valid email address."
+        null=False
+    )
+    phone_number = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        unique=True
     )
     first_name = models.CharField(
         _('first name'),
@@ -43,71 +39,42 @@ class User(AbstractUser):
         blank=False,
         null=False
     )
-    
-    # Optional fields
-    phone_number = models.CharField(
-        max_length=20,
-        blank=True,
-        null=True,
-        unique=True
-    )
     profile_picture = models.ImageField(
         upload_to='profile_pics/',
         null=True,
         blank=True
     )
-    online_status = models.BooleanField(
-        default=False,
-        help_text="Designates whether the user is currently online."
-    )
-    last_seen = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Last time the user was active."
-    )
-    bio = models.TextField(
-        max_length=500,
-        blank=True,
-        help_text="Brief description about yourself."
-    )
+    online_status = models.BooleanField(default=False)
+    last_seen = models.DateTimeField(null=True, blank=True)
+    bio = models.TextField(max_length=500, blank=True)
 
-    # Authentication configuration
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'first_name', 'last_name']
-
-    class Meta:
-        verbose_name = _('user')
-        verbose_name_plural = _('users')
 
     def __str__(self):
         return f"{self.get_full_name()} ({self.email})"
 
     def save(self, *args, **kwargs):
-        """Normalize email and handle username generation"""
-        self.email = self.email.lower().strip()
+        self.email = self.email.lower()
         if not self.username:
             self.username = self.email
         super().save(*args, **kwargs)
 
-    def get_full_name(self):
-        """Return the first_name plus the last_name with a space in between."""
-        return f"{self.first_name} {self.last_name}".strip()
-
-    def get_short_name(self):
-        """Return the short name for the user (first_name only)."""
-        return self.first_name
-
 class Conversation(models.Model):
     """
-    Model representing a conversation between multiple users.
+    Model representing a conversation between users.
     """
-    id = models.UUIDField(
+    conversation_id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
         editable=False,
-        unique=True
+        unique=True,
+        verbose_name="Conversation ID"
     )
-    participants = models.ManyToManyField(User, related_name='conversations')
+    participants = models.ManyToManyField(
+        User,
+        related_name='conversations'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_group_chat = models.BooleanField(default=False)
@@ -118,44 +85,48 @@ class Conversation(models.Model):
     
     def __str__(self):
         if self.is_group_chat and self.name:
-            return self.name
-        usernames = [user.username for user in self.participants.all()]
-        return f"Conversation between {', '.join(usernames)}"
-
+            return f"Group: {self.name}"
+        return f"Conversation ({self.conversation_id})"
 
 class Message(models.Model):
     """
-    Model representing a message in a conversation with read tracking.
+    Model representing a message in a conversation.
     """
-    id = models.UUIDField(
+    message_id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
         editable=False,
-        unique=True
+        unique=True,
+        verbose_name="Message ID"
     )
     conversation = models.ForeignKey(
-        Conversation, 
-        on_delete=models.CASCADE, 
+        Conversation,
+        on_delete=models.CASCADE,
         related_name='messages'
     )
     sender = models.ForeignKey(
-        User, 
-        on_delete=models.CASCADE, 
+        User,
+        on_delete=models.CASCADE,
         related_name='sent_messages'
     )
-    content = models.TextField()
-    timestamp = models.DateTimeField(auto_now_add=True)
+    message_body = models.TextField(
+        help_text="The content of the message"
+    )
+    sent_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When the message was sent"
+    )
     read_by = models.ManyToManyField(
-        User, 
-        related_name='read_messages', 
+        User,
+        related_name='read_messages',
         blank=True
     )
     
     class Meta:
-        ordering = ['timestamp']
+        ordering = ['sent_at']
     
     def __str__(self):
-        return f"Message from {self.sender.username} at {self.timestamp}"
+        return f"Message {self.message_id} from {self.sender}"
     
     def mark_as_read(self, user):
         """
