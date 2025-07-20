@@ -1,16 +1,16 @@
 from django.urls import path, include
-from rest_framework.routers import DefaultRouter
+from rest_framework import routers
 from .views import ConversationViewSet, MessageViewSet
 
-# Create routers
-router = DefaultRouter()
+# Initialize DefaultRouter
+router = routers.DefaultRouter()
 router.register(r'conversations', ConversationViewSet, basename='conversation')
 
-# Nested router for messages
-conversation_router = DefaultRouter()
-conversation_router.register(r'messages', MessageViewSet, basename='message')
+# Initialize another DefaultRouter for nested messages
+message_router = routers.DefaultRouter()
+message_router.register(r'messages', MessageViewSet, basename='message')
 
 urlpatterns = [
     path('', include(router.urls)),
-    path('conversations/<int:conversation_id>/', include(conversation_router.urls)),
+    path('conversations/<int:conversation_id>/', include(message_router.urls)),
 ]
