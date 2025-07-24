@@ -2,7 +2,10 @@ from rest_framework import viewsets, status, filters
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.shortcuts import get_object_or_404
+from django_filters.rest_framework import DjangoFilterBackend
+from .filters import MessageFilter
 from .models import Conversation, Message
 from .serializers import ConversationSerializer, MessageSerializer, MessageCreateSerializer
 from django.contrib.auth import get_user_model
@@ -12,7 +15,8 @@ User = get_user_model()
 class ConversationViewSet(viewsets.ModelViewSet):
     queryset = Conversation.objects.all()
     serializer_class = ConversationSerializer
-    permission_classes = [IsAuthenticated]
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsParticipantOfConversation]
     filter_backends = [filters.OrderingFilter]
     ordering_fields = ['updated_at', 'created_at']
     ordering = ['-updated_at']
@@ -45,14 +49,16 @@ class ConversationViewSet(viewsets.ModelViewSet):
 
 class MessageViewSet(viewsets.ModelViewSet):
     serializer_class = MessageSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [filters.OrderingFilter]
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsParticipantOfConversation]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = MessageFilter
+    pagination_class = PageNumberPagination
     ordering_fields = ['timestamp']
     ordering = ['-timestamp']
 
     def get_queryset(self):
-        """Return messages from conversations the user participates in"""
-        return Message.objects.filter(
+        queryset = Message.objects.filter(
             conversation__participants=self.request.user
         ).select_related('sender', 'conversation')
 
