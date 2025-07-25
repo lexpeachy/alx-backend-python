@@ -9,7 +9,6 @@ class User(AbstractUser):
     Custom User model extending Django's AbstractUser.
     Includes all required fields while maintaining built-in auth functionality.
     """
-    # Primary key (user_id equivalent)
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -17,8 +16,6 @@ class User(AbstractUser):
         unique=True,
         verbose_name="User ID"
     )
-    
-    # Required fields (AbstractUser already includes username and password)
     email = models.EmailField(
         _('email address'),
         unique=True,
@@ -38,8 +35,6 @@ class User(AbstractUser):
         blank=False,
         null=False
     )
-    
-    # Optional fields
     phone_number = models.CharField(
         max_length=20,
         blank=True,
@@ -48,8 +43,8 @@ class User(AbstractUser):
     )
     profile_picture = models.ImageField(
         upload_to='profile_pics/',
-        null=True,
-        blank=True
+        blank=True,
+        null=True
     )
     online_status = models.BooleanField(
         default=False,

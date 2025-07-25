@@ -5,6 +5,9 @@ from .models import Conversation, Message
 User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
+    """
+    Serializer for User model.
+    """
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'bio', 'profile_picture', 'birth_date', 'online_status', 'last_seen']
@@ -15,6 +18,9 @@ class UserSerializer(serializers.ModelSerializer):
         }
 
 class MessageSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Message model.
+    """
     sender = UserSerializer(read_only=True)
     read_by = UserSerializer(many=True, read_only=True)
 
@@ -24,6 +30,9 @@ class MessageSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'timestamp', 'sender', 'read_by']
 
 class ConversationSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Conversation model.
+    """
     participants = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=User.objects.all(),

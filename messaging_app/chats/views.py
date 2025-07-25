@@ -8,11 +8,17 @@ from django_filters.rest_framework import DjangoFilterBackend
 from .filters import MessageFilter
 from .models import Conversation, Message
 from .serializers import ConversationSerializer, MessageSerializer, MessageCreateSerializer
+from .permissions import IsParticipantOfConversation
 from django.contrib.auth import get_user_model
+from rest_framework.pagination import PageNumberPagination
 
 User = get_user_model()
 
 class ConversationViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing conversations.
+    Only participants can access their conversations.
+    """
     queryset = Conversation.objects.all()
     serializer_class = ConversationSerializer
     authentication_classes = [JWTAuthentication]
@@ -22,19 +28,19 @@ class ConversationViewSet(viewsets.ModelViewSet):
     ordering = ['-updated_at']
 
     def get_queryset(self):
-        """Return conversations where current user is a participant"""
+        """Return conversations where current user is a participant."""
         return self.queryset.filter(
             participants=self.request.user
         ).prefetch_related('participants', 'messages')
 
     def perform_create(self, serializer):
-        """Create conversation and add current user as participant"""
+        """Create conversation and add current user as participant."""
         conversation = serializer.save()
         conversation.participants.add(self.request.user)
 
     @action(detail=True, methods=['post'])
     def add_participant(self, request, pk=None):
-        """Add participant to conversation"""
+        """Add participant to conversation."""
         conversation = self.get_object()
         user_id = request.data.get('user_id')
         if not user_id:
@@ -48,28 +54,33 @@ class ConversationViewSet(viewsets.ModelViewSet):
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
 class MessageViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing messages in a conversation.
+    Only participants can access and send messages.
+    """
     serializer_class = MessageSerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated, IsParticipantOfConversation]
-    filter_backends = [DjangoFilterBackend]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = MessageFilter
     pagination_class = PageNumberPagination
     ordering_fields = ['timestamp']
     ordering = ['-timestamp']
 
     def get_queryset(self):
-        queryset = Message.objects.filter(
+        """Return messages for conversations where user is a participant."""
+        return Message.objects.filter(
             conversation__participants=self.request.user
         ).select_related('sender', 'conversation')
 
     def get_serializer_class(self):
-        """Use different serializer for creation"""
+        """Use different serializer for creation."""
         if self.action in ['create', 'update', 'partial_update']:
             return MessageCreateSerializer
         return MessageSerializer
 
     def perform_create(self, serializer):
-        """Set sender and conversation for new messages"""
+        """Set sender and conversation for new messages."""
         conversation_id = self.kwargs.get('conversation_id')
         conversation = get_object_or_404(
             Conversation.objects.filter(participants=self.request.user),

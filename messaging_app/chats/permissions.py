@@ -9,11 +9,11 @@ class IsParticipantOfConversation(permissions.BasePermission):
         # Allow only authenticated users
         if not request.user.is_authenticated:
             return False
-        
+
         # For conversation list/create, just check authentication
         if view.action in ['list', 'create']:
             return True
-            
+
         # For other actions, check conversation participation
         conversation_id = view.kwargs.get('pk') or view.kwargs.get('conversation_id')
         if conversation_id:
