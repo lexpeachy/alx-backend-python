@@ -5,10 +5,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.exceptions import PermissionDenied
 from .filters import MessageFilter
 from .models import Conversation, Message
 from .serializers import ConversationSerializer, MessageSerializer, MessageCreateSerializer
 from django.contrib.auth import get_user_model
+from rest_framework.pagination import PageNumberPagination
 
 User = get_user_model()
 
@@ -42,10 +44,14 @@ class ConversationViewSet(viewsets.ModelViewSet):
         
         try:
             user = User.objects.get(id=user_id)
+            if not conversation.participants.filter(id=self.request.user.id).exists():
+                raise PermissionDenied("You must be a participant to add others")
             conversation.participants.add(user)
             return Response({'status': 'participant added'})
         except User.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        except PermissionDenied as e:
+            return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
 
 class MessageViewSet(viewsets.ModelViewSet):
     serializer_class = MessageSerializer
@@ -58,7 +64,8 @@ class MessageViewSet(viewsets.ModelViewSet):
     ordering = ['-timestamp']
 
     def get_queryset(self):
-        queryset = Message.objects.filter(
+        """Return messages from conversations the user participates in"""
+        return Message.objects.filter(
             conversation__participants=self.request.user
         ).select_related('sender', 'conversation')
 
@@ -76,3 +83,12 @@ class MessageViewSet(viewsets.ModelViewSet):
             id=conversation_id
         )
         serializer.save(sender=self.request.user, conversation=conversation)
+
+    def handle_exception(self, exc):
+        """Handle permission denied exceptions with proper 403 responses"""
+        if isinstance(exc, PermissionDenied):
+            return Response(
+                {'detail': str(exc)},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().handle_exception(exc)
