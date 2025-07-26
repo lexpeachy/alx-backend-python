@@ -1,10 +1,13 @@
 from rest_framework import permissions
 from .models import Conversation
+from rest_framework.exceptions import PermissionDenied
 
 class IsParticipantOfConversation(permissions.BasePermission):
     """
-    Custom permission to only allow participants of a conversation to access it.
+    Custom permission to only allow participants of a conversation to:
+    - Send (POST), view (GET), update (PUT/PATCH), and delete (DELETE) messages
     """
+    
     def has_permission(self, request, view):
         # Allow only authenticated users
         if not request.user.is_authenticated:
@@ -13,19 +16,30 @@ class IsParticipantOfConversation(permissions.BasePermission):
         # For conversation list/create, just check authentication
         if view.action in ['list', 'create']:
             return True
+<<<<<<< HEAD
 
         # For other actions, check conversation participation
         conversation_id = view.kwargs.get('pk') or view.kwargs.get('conversation_id')
+=======
+            
+        # For message operations, check conversation participation
+        conversation_id = view.kwargs.get('conversation_id')
+>>>>>>> 63d17a02b66d463ff6ec115078bd66d1f2cf1483
         if conversation_id:
-            return Conversation.objects.filter(
+            if not Conversation.objects.filter(
                 id=conversation_id,
                 participants=request.user
-            ).exists()
+            ).exists():
+                raise PermissionDenied("You are not a participant in this conversation")
+            return True
         return False
 
     def has_object_permission(self, request, view, obj):
-        # For messages, check if user is participant in the conversation
-        if hasattr(obj, 'conversation'):
-            return obj.conversation.participants.filter(id=request.user.id).exists()
-        # For conversations, check if user is participant
-        return obj.participants.filter(id=request.user.id).exists()
+        # Explicitly check for PUT, PATCH, DELETE methods
+        if request.method in ['PUT', 'PATCH', 'DELETE']:
+            if hasattr(obj, 'conversation'):
+                if not obj.conversation.participants.filter(id=request.user.id).exists():
+                    raise PermissionDenied("You are not a participant in this conversation")
+            elif not obj.participants.filter(id=request.user.id).exists():
+                raise PermissionDenied("You are not a participant in this conversation")
+        return True
