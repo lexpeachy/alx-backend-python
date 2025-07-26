@@ -73,11 +73,7 @@ class MessageViewSet(viewsets.ModelViewSet):
     ordering = ['-timestamp']
 
     def get_queryset(self):
-<<<<<<< HEAD
         """Return messages for conversations where user is a participant."""
-=======
-        """Return messages from conversations the user participates in"""
->>>>>>> 63d17a02b66d463ff6ec115078bd66d1f2cf1483
         return Message.objects.filter(
             conversation__participants=self.request.user
         ).select_related('sender', 'conversation')

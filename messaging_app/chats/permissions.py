@@ -16,15 +16,8 @@ class IsParticipantOfConversation(permissions.BasePermission):
         # For conversation list/create, just check authentication
         if view.action in ['list', 'create']:
             return True
-<<<<<<< HEAD
-
         # For other actions, check conversation participation
         conversation_id = view.kwargs.get('pk') or view.kwargs.get('conversation_id')
-=======
-            
-        # For message operations, check conversation participation
-        conversation_id = view.kwargs.get('conversation_id')
->>>>>>> 63d17a02b66d463ff6ec115078bd66d1f2cf1483
         if conversation_id:
             if not Conversation.objects.filter(
                 id=conversation_id,
