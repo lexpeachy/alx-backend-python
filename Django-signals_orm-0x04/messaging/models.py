@@ -1,88 +1,77 @@
-
-
-from django.db import models
-from django.contrib.auth import get_user_model
-
-User = get_user_model()
-
-
-
-class UnreadMessagesManager(models.Manager):
-    def unread_for_user(self, user):
-        return self.get_queryset().filter(receiver=user, read=False).only('id', 'sender', 'content', 'timestamp', 'parent_message')
-
 from django.db import models
 from django.contrib.auth.models import User
-from django.db.models.signals import pre_save
-from django.dispatch import receiver
+from django.utils import timezone
+
+class MessageManager(models.Manager):
+    def get_conversation(self, message):
+        """Get entire conversation thread starting from a message"""
+        return self.filter(
+            models.Q(id=message.id) |
+            models.Q(parent_message=message.id) |
+            models.Q(parent_message__parent_message=message.id)
+        ).select_related('sender', 'receiver', 'parent_message')
+
+class UnreadMessagesManager(models.Manager):
+    def for_user(self, user):
+        """Returns unread messages for a specific user"""
+        return self.filter(
+            receiver=user,
+            read=False
+        ).select_related('sender').only(
+            'id', 'content', 'timestamp', 'sender__username', 'sender__id'
+        )
 
 class Message(models.Model):
     sender = models.ForeignKey(User, related_name='sent_messages', on_delete=models.CASCADE)
     receiver = models.ForeignKey(User, related_name='received_messages', on_delete=models.CASCADE)
     content = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=True)
-    edited = models.DateTimeField(null=True, blank=True)  # Track when message was edited
-    parent_message = models.ForeignKey('self', null=True, blank=True, related_name='replies', on_delete=models.CASCADE)
+    edited = models.DateTimeField(null=True, blank=True)
+    edited_by = models.ForeignKey(User, null=True, blank=True, related_name='edited_messages', on_delete=models.SET_NULL)
     read = models.BooleanField(default=False)
+    parent_message = models.ForeignKey('self', null=True, blank=True, related_name='replies', on_delete=models.CASCADE)
 
-    objects = models.Manager()  # Default manager
-    unread = UnreadMessagesManager()  # Custom manager for unread messages
+    objects = MessageManager()
+    unread = UnreadMessagesManager()
+
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['parent_message']),
+            models.Index(fields=['sender', 'receiver']),
+        ]
 
     def __str__(self):
         return f"From {self.sender} to {self.receiver}: {self.content[:20]}"
 
-    def get_thread(self):
-        """
-        Recursively fetch all replies to this message in a threaded structure.
-        Returns a list of dicts with message and its replies.
-        """
-        def fetch_replies(message):
-            replies = message.replies.select_related('sender', 'receiver').all()
-            return [
-                {
-                    'message': reply,
-                    'replies': fetch_replies(reply)
-                }
-                for reply in replies
-            ]
-        return fetch_replies(self)
+    def mark_as_read(self):
+        """Mark message as read if it hasn't been read yet"""
+        if not self.read:
+            self.read = True
+            self.save()
+
+    def get_thread(self, depth=0, max_depth=10):
+        """Recursively fetch all replies with optimized queries"""
+        if depth >= max_depth:
+            return []
+        
+        replies = self.replies.select_related('sender', 'receiver').prefetch_related(
+            models.Prefetch('replies', queryset=Message.objects.select_related('sender', 'receiver'))
+        
+        return [{
+            'message': reply,
+            'replies': reply.get_thread(depth+1, max_depth)
+        } for reply in replies]
 
 class MessageHistory(models.Model):
     message = models.ForeignKey(Message, related_name='history', on_delete=models.CASCADE)
-    content = models.TextField()  # Old content before edit
-    edited_at = models.DateTimeField(auto_now_add=True)  # When this version was saved
+    content = models.TextField()
+    edited_at = models.DateTimeField(auto_now_add=True)
+    edited_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     
     class Meta:
-        ordering = ['-edited_at']  # Newest versions first
+        ordering = ['-edited_at']
         verbose_name_plural = 'Message Histories'
     
     def __str__(self):
-        return f"History for message {self.message.id} ({self.edited_at})"
-
-@receiver(pre_save, sender=Message)
-def track_message_edit(sender, instance, **kwargs):
-    """
-    Signal handler to track message edits and save previous versions.
-    """
-    if instance.pk:  # Only for existing messages (not new ones)
-        try:
-            old_message = Message.objects.get(pk=instance.pk)
-            if old_message.content != instance.content:  # Content has changed
-                # Save old version to history
-                MessageHistory.objects.create(
-                    message=old_message,
-                    content=old_message.content
-                )
-                # Update edited timestamp
-                instance.edited = timezone.now()
-        except Message.DoesNotExist:
-            pass  # Message was deleted or doesn't exist
-
-class Notification(models.Model):
-    user = models.ForeignKey(User, related_name='notifications', on_delete=models.CASCADE)
-    message = models.ForeignKey(Message, related_name='notifications', on_delete=models.CASCADE)
-    created_at = models.DateTimeField(auto_now_add=True)
-    is_read = models.BooleanField(default=False)
-
-    def __str__(self):
-        return f"Notification for {self.user} about message {self.message.id}"
+        return f"History for message {self.message.id} (edited by {self.edited_by} at {self.edited_at})"
