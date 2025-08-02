@@ -1,16 +1,21 @@
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
-from django.db.models import Q, Count
+from django.db.models import Q
 from .models import Message, Notification
 
 @login_required
 def inbox_unread(request):
-    """View for displaying unread messages and notifications"""
-    unread_messages = Message.unread.for_user(request.user)
+    """View for displaying unread messages using custom manager with optimization"""
+    unread_messages = Message.unread.for_user(request.user).only(
+        'id', 'content', 'timestamp', 'sender__username', 'read'
+    )
+    
     unread_notifications = Notification.objects.filter(
         user=request.user,
         read=False
-    ).select_related('message__sender')
+    ).select_related('message__sender').only(
+        'id', 'created_at', 'read', 'message__id', 'message__content'
+    )
     
     return render(request, 'messaging/inbox_unread.html', {
         'unread_messages': unread_messages,
@@ -21,28 +26,27 @@ def inbox_unread(request):
 
 @login_required
 def conversation_view(request, message_id):
-    """View for displaying threaded conversations"""
+    """View for displaying threaded conversations with optimized queries"""
     message = get_object_or_404(
-        Message.objects.select_related('sender', 'receiver'),
+        Message.objects.select_related('sender', 'receiver').only(
+            'id', 'content', 'timestamp', 'sender__username', 'receiver__username', 'read', 'parent_message_id'
+        ),
         Q(id=message_id),
         Q(sender=request.user) | Q(receiver=request.user)
     )
     
-    # Mark message and its notifications as read
     message.mark_as_read()
     
-    # Find root message
-    root_message = message
-    while root_message.parent_message:
-        root_message = root_message.parent_message
-
-    # Get all messages in the thread
+    # Get conversation thread with optimized queries
     thread_messages = Message.objects.filter(
-        Q(id=root_message.id) | 
-        Q(parent_message=root_message.id) |
-        Q(parent_message__parent_message=root_message.id)
+        Q(id=message.id) | 
+        Q(parent_message=message.id) |
+        Q(parent_message__parent_message=message.id)
     ).select_related(
         'sender', 'receiver', 'parent_message'
+    ).only(
+        'id', 'content', 'timestamp', 'sender__username', 
+        'receiver__username', 'parent_message_id', 'read'
     ).order_by('timestamp')
 
     # Build thread structure
@@ -56,18 +60,21 @@ def conversation_view(request, message_id):
             thread_structure.append(messages_dict[m.id])
 
     return render(request, 'messaging/conversation.html', {
-        'root_message': root_message,
+        'root_message': message,
         'thread_structure': thread_structure,
         'current_user': request.user
     })
 
 @login_required
 def notifications_view(request):
-    """View for displaying all notifications"""
+    """View for displaying notifications with optimized queries"""
     notifications = Notification.objects.filter(
         user=request.user
     ).select_related(
         'message', 'message__sender'
+    ).only(
+        'id', 'created_at', 'read', 
+        'message__id', 'message__content', 'message__sender__username'
     ).order_by('-created_at')
     
     return render(request, 'messaging/notifications.html', {
@@ -75,12 +82,12 @@ def notifications_view(request):
     })
 
 @login_required
-def mark_notification_read(request, notification_id):
-    """View to mark a notification as read"""
-    notification = get_object_or_404(
-        Notification,
-        id=notification_id,
-        user=request.user
-    )
-    notification.mark_as_read()
-    return redirect(request.META.get('HTTP_REFERER', 'notifications'))
+def delete_user(request):
+    """View to handle user account deletion"""
+    if request.method == 'POST':
+        user = request.user
+        logout(request)
+        user.delete()
+        messages.success(request, "Your account has been successfully deleted.")
+        return redirect('home')
+    return render(request, 'messaging/confirm_delete.html')
