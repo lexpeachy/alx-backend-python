@@ -2,6 +2,25 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 
+class Notification(models.Model):
+    """Model to store notifications for users about new messages"""
+    user = models.ForeignKey(User, related_name='notifications', on_delete=models.CASCADE)
+    message = models.ForeignKey('Message', related_name='notifications', on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    read = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Notification for {self.user.username} about message {self.message.id}"
+    
+    def mark_as_read(self):
+        """Mark notification as read"""
+        if not self.read:
+            self.read = True
+            self.save()
+
 class MessageManager(models.Manager):
     def get_conversation(self, message):
         """Get entire conversation thread starting from a message"""
@@ -49,6 +68,8 @@ class Message(models.Model):
         if not self.read:
             self.read = True
             self.save()
+            # Mark related notifications as read
+            self.notifications.update(read=True)
 
     def get_thread(self, depth=0, max_depth=10):
         """Recursively fetch all replies with optimized queries"""
@@ -56,7 +77,7 @@ class Message(models.Model):
             return []
         
         replies = self.replies.select_related('sender', 'receiver').prefetch_related(
-            models.Prefetch('replies', queryset=Message.objects.select_related('sender', 'receiver'))
+            models.Prefetch('replies', queryset=Message.objects.select_related('sender', 'receiver')))
         
         return [{
             'message': reply,
