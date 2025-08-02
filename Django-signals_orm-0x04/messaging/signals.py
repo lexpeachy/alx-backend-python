@@ -26,7 +26,7 @@ def track_message_edit(sender, instance, **kwargs):
 @receiver(post_save, sender=Message)
 def create_notification_on_message(sender, instance, created, **kwargs):
     """Create notification when new message is sent"""
-    if created:
+    if created and instance.receiver != instance.sender:  # Don't notify yourself
         Notification.objects.create(
             user=instance.receiver,
             message=instance
@@ -34,7 +34,13 @@ def create_notification_on_message(sender, instance, created, **kwargs):
 
 @receiver(post_delete, sender=User)
 def delete_related_data_on_user_delete(sender, instance, **kwargs):
-    """Clean up related messages when user is deleted"""
+    """Clean up related data when user is deleted"""
     Message.objects.filter(sender=instance).delete()
     Message.objects.filter(receiver=instance).delete()
     Notification.objects.filter(user=instance).delete()
+
+@receiver(post_save, sender=Notification)
+def mark_message_as_read_on_notification_read(sender, instance, **kwargs):
+    """When notification is marked as read, mark the message as read too"""
+    if instance.read and not instance.message.read:
+        instance.message.mark_as_read()
