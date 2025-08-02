@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.contrib.auth import logout
 from django.db.models import Q
 from .models import Message, Notification
+from django.views.decorators.cache import cache_page
 
 @login_required
 def inbox_unread(request):
@@ -25,6 +26,7 @@ def inbox_unread(request):
     })
 
 @login_required
+@cache_page(60)
 def conversation_view(request, message_id):
     """View conversation thread with optimized queries"""
     message = get_object_or_404(
