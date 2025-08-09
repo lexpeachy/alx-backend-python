@@ -15,27 +15,27 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
+from django.db import models
+from django.contrib.auth.models import User
+from django.utils import timezone
 
 class Message(models.Model):
     sender = models.ForeignKey(User, related_name='sent_messages', on_delete=models.CASCADE)
     receiver = models.ForeignKey(User, related_name='received_messages', on_delete=models.CASCADE)
     content = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=True)
-    edited = models.DateTimeField(null=True, blank=True)  # Track when message was edited
+    edited = models.DateTimeField(null=True, blank=True)
+    edited_by = models.ForeignKey(User, null=True, blank=True, related_name='edited_messages', on_delete=models.SET_NULL)  # Track who made the edit
     parent_message = models.ForeignKey('self', null=True, blank=True, related_name='replies', on_delete=models.CASCADE)
     read = models.BooleanField(default=False)
 
-    objects = models.Manager()  # Default manager
-    unread = UnreadMessagesManager()  # Custom manager for unread messages
+    objects = models.Manager()
+    unread = UnreadMessagesManager()
 
     def __str__(self):
         return f"From {self.sender} to {self.receiver}: {self.content[:20]}"
 
     def get_thread(self):
-        """
-        Recursively fetch all replies to this message in a threaded structure.
-        Returns a list of dicts with message and its replies.
-        """
         def fetch_replies(message):
             replies = message.replies.select_related('sender', 'receiver').all()
             return [
@@ -47,36 +47,22 @@ class Message(models.Model):
             ]
         return fetch_replies(self)
 
+    def get_edit_history(self):
+        """Returns all edit history for this message"""
+        return self.history.all().order_by('-edited_at')
+
 class MessageHistory(models.Model):
     message = models.ForeignKey(Message, related_name='history', on_delete=models.CASCADE)
-    content = models.TextField()  # Old content before edit
-    edited_at = models.DateTimeField(auto_now_add=True)  # When this version was saved
+    content = models.TextField()
+    edited_at = models.DateTimeField(auto_now_add=True)
+    edited_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)  # Who made this edit
     
     class Meta:
-        ordering = ['-edited_at']  # Newest versions first
+        ordering = ['-edited_at']
         verbose_name_plural = 'Message Histories'
     
     def __str__(self):
-        return f"History for message {self.message.id} ({self.edited_at})"
-
-@receiver(pre_save, sender=Message)
-def track_message_edit(sender, instance, **kwargs):
-    """
-    Signal handler to track message edits and save previous versions.
-    """
-    if instance.pk:  # Only for existing messages (not new ones)
-        try:
-            old_message = Message.objects.get(pk=instance.pk)
-            if old_message.content != instance.content:  # Content has changed
-                # Save old version to history
-                MessageHistory.objects.create(
-                    message=old_message,
-                    content=old_message.content
-                )
-                # Update edited timestamp
-                instance.edited = timezone.now()
-        except Message.DoesNotExist:
-            pass  # Message was deleted or doesn't exist
+        return f"History for message {self.message.id} (edited by {self.edited_by} at {self.edited_at})"
 
 class Notification(models.Model):
     user = models.ForeignKey(User, related_name='notifications', on_delete=models.CASCADE)
