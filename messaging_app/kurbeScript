@@ -1,0 +1,75 @@
+#!/bin/bash
+
+# kurbeScript - Local Kubernetes Setup and Verification Tool
+
+# Function to check if a command exists
+command_exists() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+# Function to install minikube on Linux/MacOS
+install_minikube() {
+  echo "Installing minikube..."
+  
+  if command_exists "brew"; then
+    brew install minikube
+  elif command_exists "curl"; then
+    curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+    sudo install minikube-linux-amd64 /usr/local/bin/minikube
+    rm minikube-linux-amd64
+  else
+    echo "Error: Cannot install minikube - no supported package manager found."
+    echo "Please install minikube manually from https://minikube.sigs.k8s.io/docs/start/"
+    exit 1
+  fi
+}
+
+# Function to start the Kubernetes cluster
+start_cluster() {
+  echo "Starting Kubernetes cluster with minikube..."
+  minikube start
+  
+  if [ $? -ne 0 ]; then
+    echo "Error: Failed to start minikube cluster"
+    exit 1
+  fi
+}
+
+# Function to verify cluster status
+verify_cluster() {
+  echo "Verifying cluster status..."
+  kubectl cluster-info
+  
+  if [ $? -ne 0 ]; then
+    echo "Error: Cluster is not running properly"
+    exit 1
+  fi
+}
+
+# Function to get available pods
+get_pods() {
+  echo "Retrieving available pods in all namespaces..."
+  kubectl get pods --all-namespaces
+}
+
+# Main script execution
+echo "=== kurbeScript - Local Kubernetes Setup ==="
+
+# Check if minikube is installed
+if ! command_exists "minikube"; then
+  echo "minikube not found."
+  install_minikube
+else
+  echo "minikube is already installed."
+fi
+
+# Start the cluster
+start_cluster
+
+# Verify the cluster
+verify_cluster
+
+# Get pod information
+get_pods
+
+echo "=== kurbeScript completed successfully ==="
