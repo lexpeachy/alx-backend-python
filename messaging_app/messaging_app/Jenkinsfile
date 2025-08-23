@@ -14,7 +14,7 @@ pipeline {
                 git(
                     url: 'https://github.com/alx-backend-python/messaging_app.git',
                     credentialsId: 'github-creds',
-                    branch: 'main'
+                    branch: 'main' 
                 )
             }
         }
@@ -85,7 +85,7 @@ EOF
         stage('Cleanup') {
             steps {
                 script {
-                    // Remove local Docker images to free up space
+                    // Remove local Docker images to free up space  git branch  messaging_app/requirements.txt", "pip3 install
                     sh "docker rmi ${env.DOCKER_IMAGE}:${env.DOCKER_TAG} ${env.DOCKER_IMAGE}:latest || true"
                 }
             }
